@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DocSigning — Rushmore Van Lines</title>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #1a1a1a; }
+.header { background: #1a1a1a; color: white; padding: 14px 24px; display: flex; align-items: center; gap: 12px; }
+.header h1 { font-size: 16px; font-weight: 500; }
+.container { max-width: 640px; margin: 24px auto; padding: 0 16px 40px; }
+.steps { display: flex; gap: 6px; margin-bottom: 20px; }
+.step { flex: 1; padding: 8px 6px; border-radius: 8px; border: 1px solid #e0e0e0; background: #fff; text-align: center; cursor: pointer; font-size: 12px; color: #666; }
+.step.active { border-color: #1a73e8; background: #e8f0fe; color: #1a73e8; font-weight: 500; }
+.step.done { border-color: #34a853; background: #e6f4ea; color: #34a853; }
+.card { background: #fff; border-radius: 12px; border: 1px solid #e0e0e0; padding: 20px; margin-bottom: 16px; }
+.card-title { font-size: 15px; font-weight: 500; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.upload-zone { border: 2px dashed #ccc; border-radius: 8px; padding: 24px; text-align: center; cursor: pointer; background: #fafafa; transition: all 0.15s; }
+.upload-zone:hover { border-color: #1a73e8; background: #e8f0fe; }
+.upload-zone.uploaded { border-color: #34a853; background: #e6f4ea; }
+.upload-zone p { font-size: 14px; color: #666; margin-top: 6px; }
+.upload-zone.uploaded p { color: #34a853; font-weight: 500; }
+input[type="file"] { display: none; }
+label.field { display: block; font-size: 12px; color: #666; margin-bottom: 4px; margin-top: 12px; }
+input[type="text"], input[type="date"], select, textarea {
+  width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid #ddd;
+  background: #fff; color: #1a1a1a; font-size: 14px; font-family: inherit;
+}
+input:focus, select:focus { outline: none; border-color: #1a73e8; }
+.canvas-wrap { border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: #fff; cursor: crosshair; margin-top: 8px; }
+canvas { display: block; width: 100%; touch-action: none; }
+.hint { font-size: 11px; color: #999; margin-top: 4px; }
+.btn-row { display: flex; gap: 8px; margin-top: 16px; }
+button { padding: 9px 18px; border-radius: 8px; border: 1px solid #ddd; background: #fff; color: #1a1a1a; font-size: 13px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+button:hover { background: #f5f5f5; }
+button.primary { background: #1a73e8; border-color: #1a73e8; color: #fff; }
+button.primary:hover { background: #1557b0; }
+button.success { background: #34a853; border-color: #34a853; color: #fff; }
+button.small { padding: 5px 12px; font-size: 12px; }
+.page { display: none; }
+.page.active { display: block; }
+.summary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.sum-card { background: #f9f9f9; border-radius: 8px; border: 1px solid #e0e0e0; padding: 14px; text-align: center; }
+.sum-icon { font-size: 24px; margin-bottom: 4px; }
+.sum-label { font-size: 12px; color: #666; margin-bottom: 6px; }
+.tag { display: inline-block; font-size: 11px; padding: 2px 10px; border-radius: 20px; }
+.tag.ok { background: #e6f4ea; color: #34a853; }
+.tag.no { background: #fef7e0; color: #f9ab00; }
+.sep { height: 1px; background: #e0e0e0; margin: 14px 0; }
+.auth-bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; border: 1px solid #e0e0e0; background: #fafafa; margin-bottom: 16px; font-size: 13px; }
+.auth-bar.connected { border-color: #34a853; background: #e6f4ea; color: #34a853; }
+.auth-bar.error { border-color: #ea4335; background: #fce8e6; color: #ea4335; }
+.progress { display: none; align-items: center; gap: 10px; padding: 12px; border-radius: 8px; background: #e8f0fe; border: 1px solid #1a73e8; color: #1a73e8; font-size: 13px; margin-top: 12px; }
+.progress.show { display: flex; }
+.result-msg { margin-top: 10px; font-size: 13px; padding: 10px 14px; border-radius: 8px; display: none; }
+.result-msg.ok { background: #e6f4ea; color: #34a853; border: 1px solid #34a853; }
+.result-msg.err { background: #fce8e6; color: #ea4335; border: 1px solid #ea4335; }
+.w9-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.w9-full { grid-column: 1 / -1; }
+@media (max-width: 500px) {
+  .steps { flex-wrap: wrap; }
+  .step { min-width: 45%; }
+  .summary-grid { grid-template-columns: 1fr; }
+  .w9-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+  <h1>DocSigning — Rushmore Van Lines</h1>
+</div>
+
+<div class="container">
+
+  <div class="auth-bar" id="auth-bar">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.18 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.6a16 16 0 0 0 6 6l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+    <span id="auth-status">Google Drive не подключён</span>
+    <button class="small" id="auth-btn" onclick="authGoogle()" style="margin-left:auto">Войти в Google</button>
+  </div>
+
+  <div class="steps">
+    <div class="step active" id="s1">📄 1. BOL</div>
+    <div class="step" id="s2">✍️ 2. Closing</div>
+    <div class="step" id="s3">🪪 3. W9</div>
+    <div class="step" id="s4">✅ Готово</div>
+  </div>
+
+  <!-- STEP 1: BOL -->
+  <div class="page active" id="p1">
+    <div class="card">
+      <div class="card-title">📄 Bill of Lading (BOL)</div>
+      <label class="field">Job No.</label>
+      <input type="text" id="job-no" placeholder="DX7091128">
+      <label class="field" style="margin-top:14px">Загрузить подписанный BOL (PDF)</label>
+      <label>
+        <input type="file" id="bol-file" accept=".pdf" onchange="fileUploaded('bol')">
+        <div class="upload-zone" id="bol-zone" onclick="this.previousElementSibling.click()">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <p id="bol-text">Нажмите или перетащите PDF</p>
+        </div>
+      </label>
+    </div>
+    <div class="btn-row" style="justify-content:flex-end">
+      <button class="primary" onclick="goTo(2)">Далее →</button>
+    </div>
+  </div>
+
+  <!-- STEP 2: Closing Sheet -->
+  <div class="page" id="p2">
+    <div class="card">
+      <div class="card-title">✍️ Closing Sheet</div>
+      <label class="field">Имя (Name)</label>
+      <input type="text" id="cs-name" placeholder="John Smith">
+      <label class="field">Дата (Date)</label>
+      <input type="date" id="cs-date">
+      <label class="field">Подпись — нарисуйте ниже</label>
+      <div class="canvas-wrap">
+        <canvas id="sig-canvas" height="120"></canvas>
+      </div>
+      <div class="hint">Используйте мышь или палец на экране</div>
+      <div class="btn-row">
+        <button class="small" onclick="clearSig()">🗑 Очистить</button>
+      </div>
+    </div>
+    <div class="btn-row" style="justify-content:space-between">
+      <button onclick="goTo(1)">← Назад</button>
+      <button class="primary" onclick="goTo(3)">Далее →</button>
+    </div>
+  </div>
+
+  <!-- STEP 3: W9 -->
+  <div class="page" id="p3">
+    <div class="card">
+      <div class="card-title">🪪 W9</div>
+      <label class="field">У вас уже есть заполненный W9?</label>
+      <select id="w9-mode" onchange="toggleW9()">
+        <option value="upload">Да — загрузить готовый PDF</option>
+        <option value="fill">Нет — заполнить форму здесь</option>
+      </select>
+
+      <div id="w9-upload-wrap" style="margin-top:14px">
+        <label>
+          <input type="file" id="w9-file" accept=".pdf" onchange="fileUploaded('w9')">
+          <div class="upload-zone" id="w9-zone" onclick="this.previousElementSibling.click()">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <p id="w9-text">Нажмите или перетащите W9 PDF</p>
+          </div>
+        </label>
+      </div>
+
+      <div id="w9-form-wrap" style="display:none; margin-top:14px">
+        <div class="w9-grid">
+          <div class="w9-full">
+            <label class="field">Имя или название бизнеса</label>
+            <input type="text" id="w9-name" placeholder="John Smith / Smith LLC">
+          </div>
+          <div class="w9-full">
+            <label class="field">Адрес</label>
+            <input type="text" id="w9-addr" placeholder="123 Main St, City, State ZIP">
+          </div>
+          <div>
+            <label class="field">Тип налогоплательщика</label>
+            <select id="w9-type">
+              <option>Individual / Sole proprietor</option>
+              <option>LLC</option>
+              <option>C Corporation</option>
+              <option>S Corporation</option>
+              <option>Partnership</option>
+            </select>
+          </div>
+          <div>
+            <label class="field">SSN или EIN</label>
+            <input type="text" id="w9-tin" placeholder="XXX-XX-XXXX">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="btn-row" style="justify-content:space-between">
+      <button onclick="goTo(2)">← Назад</button>
+      <button class="primary" onclick="goTo(4)">Готово ✓</button>
+    </div>
+  </div>
+
+  <!-- STEP 4: Summary -->
+  <div class="page" id="p4">
+    <div class="card">
+      <div class="card-title">✅ Пакет документов готов</div>
+      <div class="summary-grid">
+        <div class="sum-card">
+          <div class="sum-icon">📄</div>
+          <div class="sum-label">BOL</div>
+          <div class="tag" id="bol-tag">—</div>
+        </div>
+        <div class="sum-card">
+          <div class="sum-icon">✍️</div>
+          <div class="sum-label">Closing Sheet</div>
+          <div class="tag" id="cs-tag">—</div>
+        </div>
+        <div class="sum-card">
+          <div class="sum-icon">🪪</div>
+          <div class="sum-label">W9</div>
+          <div class="tag" id="w9-tag">—</div>
+        </div>
+      </div>
+      <div class="sep"></div>
+      <label class="field">Папка в Google Drive</label>
+      <input type="text" id="folder-name" placeholder="DocSigning / Job DX7091128">
+      <div class="btn-row" style="margin-top:14px">
+        <button class="primary" onclick="saveToDrive()">☁️ Сохранить в Google Drive</button>
+        <button onclick="downloadClosing()">⬇️ Скачать Closing PDF</button>
+      </div>
+      <div class="progress" id="progress-bar">
+        <span id="progress-text">Сохраняем...</span>
+      </div>
+      <div class="result-msg" id="result-msg"></div>
+    </div>
+    <button class="small" onclick="resetAll()" style="margin-top:8px">↺ Новый пакет</button>
+  </div>
+
+</div>
+
+<script>
+const CLIENT_ID = '1025062434646-knnqqgsn7nql1fng31srt31b6m71rrqm.apps.googleusercontent.com';
+const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+let accessToken = null;
+let sigCtx, sigDrawing = false;
+let state = { bol: false, w9: false, sig: false, bolFile: null, w9File: null };
+
+function goTo(n) {
+  document.querySelectorAll('.page').forEach((p,i) => p.classList.toggle('active', i===n-1));
+  document.querySelectorAll('.step').forEach((s,i) => {
+    s.classList.remove('active','done');
+    if(i===n-1) s.classList.add('active');
+    else if(i<n-1) s.classList.add('done');
+  });
+  if(n===2) initCanvas();
+  if(n===4) buildSummary();
+}
+
+function fileUploaded(type) {
+  const f = document.getElementById(type+'-file').files[0];
+  if(!f) return;
+  document.getElementById(type+'-zone').classList.add('uploaded');
+  document.getElementById(type+'-text').textContent = '✓ ' + f.name;
+  state[type] = true;
+  if(type==='bol') state.bolFile = f;
+  if(type==='w9') state.w9File = f;
+}
+
+function toggleW9() {
+  const v = document.getElementById('w9-mode').value;
+  document.getElementById('w9-upload-wrap').style.display = v==='upload' ? '' : 'none';
+  document.getElementById('w9-form-wrap').style.display = v==='fill' ? '' : 'none';
+}
+
+function initCanvas() {
+  const c = document.getElementById('sig-canvas');
+  if(c._init) return;
+  c._init = true;
+  c.width = c.parentElement.offsetWidth;
+  sigCtx = c.getContext('2d');
+  sigCtx.strokeStyle = '#1a1a1a';
+  sigCtx.lineWidth = 2.5;
+  sigCtx.lineCap = 'round';
+  sigCtx.lineJoin = 'round';
+  const pos = e => {
+    const r = c.getBoundingClientRect();
+    const t = e.touches ? e.touches[0] : e;
+    return { x: (t.clientX-r.left)*(c.width/r.width), y: (t.clientY-r.top)*(c.height/r.height) };
+  };
+  c.addEventListener('mousedown', e => { sigDrawing=true; const p=pos(e); sigCtx.beginPath(); sigCtx.moveTo(p.x,p.y); });
+  c.addEventListener('mousemove', e => { if(!sigDrawing) return; const p=pos(e); sigCtx.lineTo(p.x,p.y); sigCtx.stroke(); });
+  c.addEventListener('mouseup', () => { sigDrawing=false; state.sig=true; });
+  c.addEventListener('mouseleave', () => { sigDrawing=false; });
+  c.addEventListener('touchstart', e => { e.preventDefault(); sigDrawing=true; const p=pos(e); sigCtx.beginPath(); sigCtx.moveTo(p.x,p.y); }, {passive:false});
+  c.addEventListener('touchmove', e => { e.preventDefault(); if(!sigDrawing) return; const p=pos(e); sigCtx.lineTo(p.x,p.y); sigCtx.stroke(); }, {passive:false});
+  c.addEventListener('touchend', () => { sigDrawing=false; state.sig=true; });
+}
+
+function clearSig() {
+  if(!sigCtx) return;
+  const c = document.getElementById('sig-canvas');
+  sigCtx.clearRect(0,0,c.width,c.height);
+  state.sig=false;
+}
+
+function buildSummary() {
+  const setTag = (id, ok, yes, no) => {
+    const el = document.getElementById(id);
+    el.textContent = ok ? yes : no;
+    el.className = 'tag ' + (ok ? 'ok' : 'no');
+  };
+  setTag('bol-tag', state.bol, 'Загружен', 'Не загружен');
+  const csOk = document.getElementById('cs-name').value && document.getElementById('cs-date').value && state.sig;
+  setTag('cs-tag', csOk, 'Подписан', 'Не заполнен');
+  const w9mode = document.getElementById('w9-mode').value;
+  const w9ok = w9mode==='upload' ? state.w9 : !!document.getElementById('w9-name').value;
+  setTag('w9-tag', w9ok, 'Готов', 'Не заполнен');
+  const job = document.getElementById('job-no').value;
+  document.getElementById('folder-name').value = job ? 'DocSigning / Job ' + job : 'DocSigning';
+}
+
+function authGoogle() {
+  const tc = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: (resp) => {
+      if(resp.error) {
+        document.getElementById('auth-bar').className = 'auth-bar error';
+        document.getElementById('auth-status').textContent = 'Ошибка: ' + resp.error;
+        return;
+      }
+      accessToken = resp.access_token;
+      document.getElementById('auth-bar').className = 'auth-bar connected';
+      document.getElementById('auth-status').textContent = '✓ Google Drive подключён';
+      document.getElementById('auth-btn').textContent = 'Выйти';
+      document.getElementById('auth-btn').onclick = signOut;
+    }
+  });
+  tc.requestAccessToken();
+}
+
+function signOut() {
+  if(accessToken) google.accounts.oauth2.revoke(accessToken);
+  accessToken = null;
+  document.getElementById('auth-bar').className = 'auth-bar';
+  document.getElementById('auth-status').textContent = 'Google Drive не подключён';
+  document.getElementById('auth-btn').textContent = 'Войти в Google';
+  document.getElementById('auth-btn').onclick = authGoogle;
+}
+
+function generateClosingPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.setFontSize(20); doc.text('Closing Sheet', 105, 24, {align:'center'});
+  doc.setFontSize(11);
+  doc.text('Job No: ' + (document.getElementById('job-no').value||''), 20, 45);
+  doc.text('Name: ' + (document.getElementById('cs-name').value||''), 20, 58);
+  doc.text('Date: ' + (document.getElementById('cs-date').value||''), 20, 71);
+  if(state.sig) {
+    doc.text('Signature:', 20, 90);
+    const img = document.getElementById('sig-canvas').toDataURL('image/png');
+    doc.addImage(img, 'PNG', 20, 95, 100, 30);
+  }
+  return doc.output('blob');
+}
+
+function generateW9PDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.setFontSize(20); doc.text('Form W-9', 105, 24, {align:'center'});
+  doc.setFontSize(11);
+  doc.text('Name: ' + (document.getElementById('w9-name').value||''), 20, 45);
+  doc.text('Address: ' + (document.getElementById('w9-addr').value||''), 20, 58);
+  doc.text('Type: ' + (document.getElementById('w9-type').value||''), 20, 71);
+  doc.text('TIN: ' + (document.getElementById('w9-tin').value||''), 20, 84);
+  return doc.output('blob');
+}
+
+async function createFolder(name, parentId) {
+  const q = `name='${name}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`;
+  const r = await fetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q), {
+    headers:{Authorization:'Bearer '+accessToken}
+  });
+  const d = await r.json();
+  if(d.files&&d.files.length>0) return d.files[0].id;
+  const cr = await fetch('https://www.googleapis.com/drive/v3/files',{
+    method:'POST',
+    headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'},
+    body:JSON.stringify({name,mimeType:'application/vnd.google-apps.folder',parents:[parentId]})
+  });
+  const cf = await cr.json();
+  return cf.id;
+}
+
+async function createDriveFolder(path) {
+  const parts = path.split('/').map(s=>s.trim()).filter(Boolean);
+  let parentId = 'root';
+  for(const part of parts) parentId = await createFolder(part, parentId);
+  return parentId;
+}
+
+async function uploadFile(blob, name, folderId) {
+  const meta = {name, parents:[folderId]};
+  const form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify(meta)],{type:'application/json'}));
+  form.append('file', blob, name);
+  await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{
+    method:'POST',
+    headers:{Authorization:'Bearer '+accessToken},
+    body:form
+  });
+}
+
+async function saveToDrive() {
+  if(!accessToken) { authGoogle(); return; }
+  const prog = document.getElementById('progress-bar');
+  const progText = document.getElementById('progress-text');
+  const result = document.getElementById('result-msg');
+  prog.classList.add('show');
+  result.style.display='none';
+  try {
+    const folderPath = document.getElementById('folder-name').value || 'DocSigning';
+    const job = document.getElementById('job-no').value || 'job';
+    progText.textContent = 'Создаём папку в Drive...';
+    const folderId = await createDriveFolder(folderPath);
+    if(state.bolFile) {
+      progText.textContent = 'Загружаем BOL...';
+      await uploadFile(state.bolFile, 'BOL_'+job+'.pdf', folderId);
+    }
+    progText.textContent = 'Генерируем Closing Sheet...';
+    await uploadFile(generateClosingPDF(), 'ClosingSheet_'+job+'.pdf', folderId);
+    const w9mode = document.getElementById('w9-mode').value;
+    if(w9mode==='upload'&&state.w9File) {
+      progText.textContent = 'Загружаем W9...';
+      await uploadFile(state.w9File, 'W9_'+job+'.pdf', folderId);
+    } else if(w9mode==='fill') {
+      progText.textContent = 'Генерируем W9...';
+      await uploadFile(generateW9PDF(), 'W9_'+job+'.pdf', folderId);
+    }
+    prog.classList.remove('show');
+    result.className = 'result-msg ok';
+    result.style.display='block';
+    result.textContent = '✓ Все документы сохранены в Google Drive → ' + folderPath;
+  } catch(e) {
+    prog.classList.remove('show');
+    result.className = 'result-msg err';
+    result.style.display='block';
+    result.textContent = 'Ошибка: ' + e.message;
+  }
+}
+
+function downloadClosing() {
+  const job = document.getElementById('job-no').value || 'job';
+  const blob = generateClosingPDF();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'ClosingSheet_'+job+'.pdf';
+  a.click();
+}
+
+function resetAll() {
+  state = {bol:false,w9:false,sig:false,bolFile:null,w9File:null};
+  ['bol','w9'].forEach(t => {
+    const z = document.getElementById(t+'-zone');
+    if(z) z.classList.remove('uploaded');
+    const tx = document.getElementById(t+'-text');
+    if(tx) tx.textContent = t==='bol' ? 'Нажмите или перетащите PDF' : 'Нажмите или перетащите W9 PDF';
+  });
+  document.getElementById('cs-name').value='';
+  document.getElementById('job-no').value='';
+  if(sigCtx){const c=document.getElementById('sig-canvas');sigCtx.clearRect(0,0,c.width,c.height);}
+  document.getElementById('result-msg').style.display='none';
+  goTo(1);
+}
+
+document.getElementById('cs-date').value = new Date().toISOString().split('T')[0];
+</script>
+</body>
+</html>
